@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         mx.vendetta.missions
-// @namespace    mx.vendetta.missions
+// @name         mx.vendetta.missioni
+// @namespace    mx.vendetta.missioni
 // @version      1.2.0
 // @description  Missions-Script für vendettagame.es: Save/Clear für Einheiten, Ressourcen, Koordinaten & Mission + Send </> Autoloop + Gebäude +/- im Sidebar
 // @match        https://vendettagame.es/*
