@@ -6,8 +6,8 @@
 // @match        https://vendettagame.es/*
 // @run-at       document-idle
 // @grant        none
-// @updateURL
-// @downloadURL
+// @updateURL    https://github.com/mxOneScripts/mx.vendetta.missioni/raw/refs/heads/main/mx.vendetta.missions.user.js
+// @downloadURL  https://github.com/mxOneScripts/mx.vendetta.missioni/raw/refs/heads/main/mx.vendetta.missions.user.js
 // ==/UserScript==
 
 
