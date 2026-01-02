@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         mx.vendetta.missioni
 // @namespace    mx.vendetta.missioni
-// @version      1.2.0
+// @version      2.0.0
 // @description  Missions-Script für vendettagame.es: Save/Clear für Einheiten, Ressourcen, Koordinaten & Mission + Send </> Autoloop + Gebäude +/- im Sidebar
 // @match        https://vendettagame.es/*
 // @run-at       document-idle
@@ -19,15 +19,25 @@
   ========================================================= */
   const $  = (s, c=document) => c.querySelector(s);
   const $$ = (s, c=document) => Array.from(c.querySelectorAll(s));
-  const LS = k => 'vd:missions:' + k;
+  const LS_M = (k) => 'vd:missions:' + k;
+  const LS_VG = (k) => 'vd:vg:collapse:' + k;
 
-  const toInt = v => {
+  const toInt = (v) => {
     const n = parseInt(String(v ?? '').replace(/[^\d-]/g, ''), 10);
     return Number.isFinite(n) ? n : 0;
   };
 
+  const norm = (s) => String(s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const isMissionsPage = () => /\/misiones\b/.test(location.pathname);
+  const isVisionGeneralPage = () => /\/vision-general\b/.test(location.pathname);
+
   /* =========================================================
-     Styles
+     Styles (dein aktuelles CSS + Toggle CSS)
   ========================================================= */
   function ensureStyle() {
     if ($('#vdMissionFinalStyle')) return;
@@ -79,16 +89,51 @@
       }
 
       .vd-side-btn:hover{
-       background:#e8dbb5;
-       box-shadow: inset 0 0 0 1px rgba(128,0,0,0.25);
-     }
+        background:#e8dbb5;
+        box-shadow: inset 0 0 0 1px rgba(128,0,0,0.25);
+      }
 
-     /* Click */
-    .vd-side-btn:active{
-      transform: translateY(1px);
-     }
+      .vd-side-btn:active{
+        transform: translateY(1px);
+      }
 
-      .vd-side-btn:hover{ background:#e8dbb5; }
+      /* ===== NUR Visión general: Toggle Button im roten Header ===== */
+     .vd-vg-toggle{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+
+  width:19px;
+  height:16px;
+  line-height:18px;
+
+  padding-bottom:3px;
+  padding-top:0;
+
+  border-radius:3px;
+  border:1px solid rgba(255,255,255,0.8);
+  background: rgba(255,255,255,0.10);
+  color:#fff;
+  font-weight:700;
+  font-size:14px;        /* optional, aber konsistent */
+  cursor:pointer;
+  user-select:none;
+
+  transition: background .15s ease, transform .05s ease;
+}
+
+      .vd-vg-toggle:hover{ background: rgba(255,255,255,0.20); }
+      .vd-vg-toggle:active{ transform: translateY(1px); }
+
+      .vd-vg-collapsed{
+        display:none !important;
+      }
+      /* FIX: Section-Header einheitlich ausrichten */
+      .vd-vg-header{
+       display:flex !important;
+       align-items:center;
+       justify-content:space-between;
+     }
     `;
 
     const st = document.createElement('style');
@@ -120,9 +165,11 @@
   }
 
   /* =========================================================
-     UNITS
+     Missions: Save/Clear (nur /misiones)
   ========================================================= */
   function enhanceUnits() {
+    if (!isMissionsPage()) return;
+
     $$('.unit-row').forEach(row => {
       if (row.dataset.vdDone) return;
 
@@ -133,22 +180,21 @@
       row.dataset.vdDone = '1';
 
       const key = 'unit:' + input.dataset.tropa;
-      const saved = localStorage.getItem(LS(key));
+      const saved = localStorage.getItem(LS_M(key));
       if (saved !== null) input.value = saved;
 
       label.append(
         makeSaveClear(
-          () => localStorage.setItem(LS(key), toInt(input.value)),
-          () => { localStorage.removeItem(LS(key)); input.value = 0; }
+          () => localStorage.setItem(LS_M(key), String(toInt(input.value))),
+          () => { localStorage.removeItem(LS_M(key)); input.value = 0; }
         )
       );
     });
   }
 
-  /* =========================================================
-     RESOURCES
-  ========================================================= */
   function enhanceResources() {
+    if (!isMissionsPage()) return;
+
     $$('.resource-row').forEach(row => {
       if (row.dataset.vdDone) return;
 
@@ -159,22 +205,21 @@
       row.dataset.vdDone = '1';
 
       const key = 'res:' + input.dataset.recurso;
-      const saved = localStorage.getItem(LS(key));
+      const saved = localStorage.getItem(LS_M(key));
       if (saved !== null) input.value = saved;
 
       label.append(
         makeSaveClear(
-          () => localStorage.setItem(LS(key), toInt(input.value)),
-          () => { localStorage.removeItem(LS(key)); input.value = 0; }
+          () => localStorage.setItem(LS_M(key), String(toInt(input.value))),
+          () => { localStorage.removeItem(LS_M(key)); input.value = 0; }
         )
       );
     });
   }
 
-  /* =========================================================
-     COORDINATES + MISSION
-  ========================================================= */
   function enhanceGoal() {
+    if (!isMissionsPage()) return;
+
     const coords = $$('.coordinate-input');
     if (coords.length === 3) {
       const row = coords[0].closest('.goal-row');
@@ -184,20 +229,20 @@
         const label = row.querySelector('.goal-label');
         if (!label) return;
 
-        const saved = localStorage.getItem(LS('coords'));
+        const saved = localStorage.getItem(LS_M('coords'));
         if (saved) {
           try {
             const c = JSON.parse(saved);
-            coords[0].value = c.x;
-            coords[1].value = c.y;
-            coords[2].value = c.z;
+            coords[0].value = c.x ?? coords[0].value;
+            coords[1].value = c.y ?? coords[1].value;
+            coords[2].value = c.z ?? coords[2].value;
           } catch {}
         }
 
         label.append(
           makeSaveClear(
             () => localStorage.setItem(
-              LS('coords'),
+              LS_M('coords'),
               JSON.stringify({
                 x: toInt(coords[0].value),
                 y: toInt(coords[1].value),
@@ -205,7 +250,7 @@
               })
             ),
             () => {
-              localStorage.removeItem(LS('coords'));
+              localStorage.removeItem(LS_M('coords'));
               coords.forEach(i => i.value = 0);
             }
           )
@@ -221,20 +266,20 @@
       const label = row?.querySelector('.goal-label');
       if (!label) return;
 
-      const saved = localStorage.getItem(LS('mission'));
+      const saved = localStorage.getItem(LS_M('mission'));
       if (saved) sel.value = saved;
 
       label.append(
         makeSaveClear(
-          () => localStorage.setItem(LS('mission'), sel.value),
-          () => { localStorage.removeItem(LS('mission')); sel.selectedIndex = 0; }
+          () => localStorage.setItem(LS_M('mission'), sel.value),
+          () => { localStorage.removeItem(LS_M('mission')); sel.selectedIndex = 0; }
         )
       );
     }
   }
 
   /* =========================================================
-     SIDEBAR BUILDING +/- (links & rechts vom Dropdown)
+     Sidebar Gebäude +/- (global, alle Seiten)
   ========================================================= */
   function enhanceSidebar() {
     $$('#edificio_selector').forEach(sel => {
@@ -263,105 +308,234 @@
   function switchBuilding(sel, dir) {
     const i = sel.selectedIndex + dir;
     if (i < 0 || i >= sel.options.length) return;
-    const id = sel.options[i].value;
     if (typeof window.cambiarEdificio === 'function') {
-      window.cambiarEdificio(id);
+      window.cambiarEdificio(sel.options[i].value);
     }
   }
-
 
   /* =========================================================
-   SEND < / SEND > AUTOLOOP – CONFIRM/ALERT SAFE
-  ======================================================= */
-const AUTO_KEY = 'vd:autoDir';
+     Send Buttons (nur /misiones)
+  ========================================================= */
+  function addSendButtons() {
+    if (!isMissionsPage()) return;
 
-function addSendButtons() {
-  const bar = document.querySelector('.action-buttons');
-  const send = document.querySelector('.send-button');
-  if (!bar || !send || bar.dataset.vdSend) return;
+    const bar = $('.action-buttons');
+    const send = $('.send-button');
+    if (!bar || !send || bar.dataset.vdSend) return;
 
-  bar.dataset.vdSend = '1';
+    bar.dataset.vdSend = '1';
 
-  const mk = txt => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'action-button';
-    b.textContent = txt;
-    return b;
-  };
+    const mk = (txt) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'action-button';
+      b.textContent = txt;
+      return b;
+    };
 
-  const prev = mk('< Send');
-  const next = mk('Send >');
+    const prev = mk('< Send');
+    const next = mk('Send >');
 
-  prev.onclick = () => runAutoloop(-1, send);
-  next.onclick = () => runAutoloop(1, send);
+    prev.onclick = () => runAutoloop(-1, send);
+    next.onclick = () => runAutoloop(1, send);
 
-  bar.insertBefore(prev, bar.firstChild);
-  bar.appendChild(next);
-}
-
-function runAutoloop(dir, sendBtn) {
-  sessionStorage.setItem(AUTO_KEY, String(dir));
-
-  const origConfirm = window.confirm;
-  const origAlert   = window.alert;
-
-  let sent = false;
-
-  // auto-confirm
-  window.confirm = function () {
-    return true;
-  };
-
-  // detect success alert
-  window.alert = function (msg) {
-    if (typeof msg === 'string' && msg.toLowerCase().includes('misión')) {
-      sent = true;
-      setTimeout(() => {
-        switchBuildingAfterMission();
-      }, 200);
-    }
-    origAlert(msg);
-  };
-
-  sendBtn.click();
-
-  // safety restore
-  setTimeout(() => {
-    window.confirm = origConfirm;
-    window.alert   = origAlert;
-  }, 5000);
-}
-
-function switchBuildingAfterMission() {
-  const dir = parseInt(sessionStorage.getItem(AUTO_KEY) || '0', 10);
-  if (!dir) return;
-
-  const sels = document.querySelectorAll('#edificio_selector');
-  const sel = Array.from(sels).find(s => s.offsetWidth > 0) || sels[0];
-  if (!sel) return;
-
-  sessionStorage.removeItem(AUTO_KEY);
-
-  const i = sel.selectedIndex + dir;
-  if (i < 0 || i >= sel.options.length) return;
-
-  if (typeof window.cambiarEdificio === 'function') {
-    window.cambiarEdificio(sel.options[i].value);
+    bar.insertBefore(prev, bar.firstChild);
+    bar.appendChild(next);
   }
-}
+
+  const AUTO_KEY = 'vd:autoDir';
+
+  function runAutoloop(dir, sendBtn) {
+    sessionStorage.setItem(AUTO_KEY, String(dir));
+
+    const origConfirm = window.confirm;
+    const origAlert   = window.alert;
+
+    window.confirm = function () { return true; };
+
+    window.alert = function (msg) {
+      try {
+        if (typeof msg === 'string' && norm(msg).includes('mision')) {
+          setTimeout(() => switchBuildingAfterMission(), 250);
+        }
+      } catch {}
+      origAlert(msg);
+    };
+
+    sendBtn.click();
+
+    setTimeout(() => {
+      window.confirm = origConfirm;
+      window.alert   = origAlert;
+    }, 5000);
+  }
+
+  function switchBuildingAfterMission() {
+    const dir = parseInt(sessionStorage.getItem(AUTO_KEY) || '0', 10);
+    if (!dir) return;
+
+    const sels = document.querySelectorAll('#edificio_selector');
+    const sel = Array.from(sels).find(s => s.offsetWidth > 0) || sels[0];
+    if (!sel) return;
+
+    sessionStorage.removeItem(AUTO_KEY);
+
+    const i = sel.selectedIndex + dir;
+    if (i < 0 || i >= sel.options.length) return;
+
+    if (typeof window.cambiarEdificio === 'function') {
+      window.cambiarEdificio(sel.options[i].value);
+    }
+  }
+
+  /* =========================================================
+     Visión general: Global Collapse (NUR /vision-general)
+     FIX: echte Abschnitt-Header erkennen (inkl. <header> bei MISIÓNES),
+          keine Punkte-Kacheln mehr
+  ========================================================= */
+
+  const VG_SECTION_KEYS = {
+    'misiones': 'misiones',
+    'habitaciones en construccion': 'hab_construccion',
+    'habitaciones en construcción': 'hab_construccion',
+    'reclutamiento': 'reclutamiento',
+    'seguridad': 'seguridad',
+    'entrenamiento': 'entrenamiento',
+    'tropas en edificio': 'tropas_edificio',
+    'tropas en el edificio': 'tropas_edificio'
+  };
+
+  // ✅ NUR diese "rot + px-2 py-1 text-xs" Header sind Sektionen
+  function getSectionHeaders() {
+    return $$('[class*="bg-[#800000]"]')
+      .filter(el =>
+        el.classList.contains('bg-[#800000]') &&
+        el.classList.contains('text-white') &&
+        el.classList.contains('font-bold') &&
+        el.classList.contains('px-2') &&
+        el.classList.contains('py-1') &&
+        el.classList.contains('text-xs')
+      );
+  }
+
+  function attachToggleToHeader(header, collapsed, onClick) {
+    const toggle = document.createElement('span');
+    toggle.className = 'vd-vg-toggle';
+    toggle.textContent = collapsed ? '+' : '−';
+    toggle.addEventListener('click', onClick);
+
+    // Wenn rechts schon ein <span>(x/y)</span> existiert, packen wir Toggle daneben.
+    const spans = header.querySelectorAll('span');
+    const rightSpan = spans.length >= 2 ? spans[1] : null;
+
+    if (rightSpan && rightSpan.parentElement === header) {
+      const wrap = document.createElement('span');
+      wrap.style.display = 'inline-flex';
+      wrap.style.alignItems = 'center';
+      wrap.style.gap = '10px';
+
+      header.replaceChild(wrap, rightSpan);
+      wrap.appendChild(rightSpan);
+      wrap.appendChild(toggle);
+    } else {
+      const wrap = document.createElement('span');
+      wrap.style.marginLeft = 'auto';
+      wrap.style.display = 'inline-flex';
+      wrap.style.alignItems = 'center';
+      wrap.appendChild(toggle);
+      header.appendChild(wrap);
+    }
+
+    return toggle;
+  }
+
+  function enhanceVisionGeneralCollapse() {
+    if (!isVisionGeneralPage()) return;
+
+    const headers = getSectionHeaders();
+
+    headers.forEach(h => {
+      if (h.dataset.vdVgDone) return;
+
+      const titleText = h.querySelector('span')?.textContent || h.textContent || '';
+      const title = norm(titleText);
+
+      const keyMatch = Object.keys(VG_SECTION_KEYS).find(k => title.includes(norm(k)));
+      if (!keyMatch) return;
+
+      h.dataset.vdVgDone = '1';
+      h.classList.add('vd-vg-header');
+
+      const sectionId = VG_SECTION_KEYS[keyMatch];
+      const storageKey = LS_VG(sectionId);
+
+      // MISIÓNES: klappt bis zum nächsten "echten" Section-Header ein
+      if (sectionId === 'misiones') {
+        enhanceVisionGeneralMissionsBlock(h, storageKey);
+        return;
+      }
+
+      // Standard: Header + nächstes Element
+      const content = h.nextElementSibling;
+      if (!content) return;
+
+      let collapsed = localStorage.getItem(storageKey) === '1';
+      if (collapsed) content.classList.add('vd-vg-collapsed');
+
+      attachToggleToHeader(h, collapsed, () => {
+        collapsed = !collapsed;
+        content.classList.toggle('vd-vg-collapsed', collapsed);
+        localStorage.setItem(storageKey, collapsed ? '1' : '0');
+        const t = h.querySelector('.vd-vg-toggle');
+        if (t) t.textContent = collapsed ? '+' : '−';
+      });
+    });
+  }
+
+  function enhanceVisionGeneralMissionsBlock(mHeader, storageKey) {
+    if (!isVisionGeneralPage()) return;
+
+    const headers = getSectionHeaders();
+    const headerSet = new Set(headers);
+
+    const toToggle = [];
+    let el = mHeader.nextElementSibling;
+
+    while (el) {
+      if (headerSet.has(el)) break; // nächster "echter" Abschnittheader
+      toToggle.push(el);
+      el = el.nextElementSibling;
+    }
+
+    let collapsed = localStorage.getItem(storageKey) === '1';
+    if (collapsed) toToggle.forEach(n => n.classList.add('vd-vg-collapsed'));
+
+    attachToggleToHeader(mHeader, collapsed, () => {
+      collapsed = !collapsed;
+      toToggle.forEach(n => n.classList.toggle('vd-vg-collapsed', collapsed));
+      localStorage.setItem(storageKey, collapsed ? '1' : '0');
+      const t = mHeader.querySelector('.vd-vg-toggle');
+      if (t) t.textContent = collapsed ? '+' : '−';
+    });
+  }
 
   /* =========================================================
      BOOT
   ========================================================= */
   function boot() {
     ensureStyle();
+
+    // global
+    enhanceSidebar();
+
+    // nur /misiones
     enhanceUnits();
     enhanceResources();
     enhanceGoal();
-    enhanceSidebar();
     addSendButtons();
-    applyAutoloopAfterReload();
+
+    // NUR /vision-general
+    enhanceVisionGeneralCollapse();
   }
 
   boot();
