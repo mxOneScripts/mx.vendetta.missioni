@@ -526,7 +526,7 @@
     ensureStyle();
 
     // global
-    enhanceSidebar();
+    //enhanceSidebar();
 
     // nur /misiones
     enhanceUnits();
